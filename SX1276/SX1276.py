@@ -6,7 +6,7 @@ from time import sleep
 gpio.init()
 
 required_ports = ["M0", "M1", "AUX", "SERIAL"] 
-default_address = {"HEAD": 0xC0,"ADDH": 0x01,"ADDL": 0x02}
+default_address = {"HEAD": 0xC0,"ADDH": 0x00,"ADDL": 0x00}
 default_speed = {"adr": 0b010,"baudrate": 0b011,"parity": 0b00}
 default_options = {"power": 0x02, "FEC": 1, "wakeup": 0b000, "drive_mode": 1,"transmission_mode": 1, "channel": 0x82}
 
@@ -72,6 +72,7 @@ class SX1276:
         parameters = [address["HEAD"], address["ADDH"], address["ADDL"],SPED,CHAN, OPTION]
         
         module.changeMode(SX1276.Mode.SLEEP)
+        sleep(2)
         module.__writeParameters(parameters)
         module.__resetModule()
 
@@ -94,8 +95,49 @@ class SX1276:
             print("Serial error. {} - check README.MD to fix".format(e))
             exit()
 
-    def sendMessage(self, message):
-        pass
+    def __formatMessage(self, message, options):
+        # assuming that the first three elements are receiver info
+        new_message = message[:3]
+        tmp_message = []
+
+        for val in message[3:]:
+            tmp = val
+            if (tmp < 254):
+                tmp_message.append(tmp)
+            else:
+                while True:
+                    tmp -= 254
+                    if (tmp < 0):
+                        tmp_message.append(tmp + 254)
+                        break
+                    elif (tmp == 0):
+                        tmp_message.append(254)
+                        break
+                    else:
+                        tmp_message.append(254)
+
+        length = len(new_message) + len(tmp_message) + 1
+
+        if length >= 512: raise ValueError("Message is larger than module buffer! Total {} bytes".format(length))
+
+        if "length" in options:    
+            if "terminator" in options: length += 1
+            new_message.append(length)
+
+        if "terminator" in options:
+            tmp_message.append(0xFF)
+
+        return new_message + tmp_message
+
+
+    # Formatting parameter adds message length byte count and splits values larger than 0xFF
+    def sendMessage(self, message, formatting=False, options=[]):
+        self.changeMode(SX1276.Mode.NORMAL)
+        
+        if formatting:
+            message = self.__formatMessage(message, options)
+        
+        self.__serial.write(bytes(message))
 
     def messageAvailable(self):
         return self.busy()
@@ -118,7 +160,7 @@ class SX1276:
             gpio.output(self.__ports["M1"], gpio.HIGH)
     
         while self.busy():
-            sleep(0.05)
+            sleep(0.1)
 
     def __readBuffer(self):
         data = []
@@ -136,7 +178,7 @@ class SX1276:
         self.changeMode(self.Mode.SLEEP)
 
         self.__writeParameters([0xC1,0xC1,0xC1])
-        sleep(1)
+        
         return self.__readBuffer()
 
     def getVersion(self):
@@ -160,22 +202,3 @@ class SX1276:
         assert(type(parameters) == list)
         self.__serial.write(bytes(parameters))
 
-ports = {
-         "M0":  port.PA18,
-         "M1":  port.PA21,
-         "AUX": port.PG8,
-         "SERIAL":  "/dev/ttyS1"}
-
-address = {"HEAD": 0xC0,"ADDH": 0x05,"ADDL": 0x02}
-speed = {"adr": 0b010,"baudrate": 0b011,"parity": 0b00}
-options = {"power": SX1276.Power.PWR_17DB, "FEC": 1, "wakeup": 0b011, "drive_mode": 1,"transmission_mode": 1}
-
-module = SX1276.begin(ports, address, options=options)
-print(module.getParameters())
-print(module.getVersion())
-module.changeMode(SX1276.Mode.NORMAL)
-print("Started. Waiting for messages.")
-while True:
-    if module.messageAvailable():
-        message = module.getMessage()
-        print("Received message: {}".format(message))
