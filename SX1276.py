@@ -5,42 +5,41 @@ from time import sleep
 
 gpio.init()
 
-class ChannelType:
-    channel_410 = 0x00
-    channel_433 = 0x17
-    channel_441 = 0x1F
-    channel_855 = 0x00
-    channel_868 = 0x82
-    channel_880 = 0xFF
-class TransmitPower:
-    PWR_20DB = 0x00
-    PWR_17DB = 0x01
-    PWR_14DB = 0x02
-    PWR_10DB = 0x03
-class ModuleMode:
-    NORMAL = 0
-    WAKEUP = 1
-    POWERSAVE = 2
-    SLEEP = 3
-
-
-
-# 410~441MHz : 410M + CHAN*1M
-# 855~880.5MHz : 855 + channel * 0.1M
-# eg. channel val (in decimal) = 441 - 410 * 1M || channel val (dec) = (880.5 - 855) * 10M
-
 required_ports = ["M0", "M1", "AUX", "SERIAL"] 
 default_address = {"HEAD": 0xC0,"ADDH": 0x01,"ADDL": 0x02}
 default_speed = {"adr": 0b010,"baudrate": 0b011,"parity": 0b00}
-default_options = {"power": TransmitPower.PWR_17DB, "FEC": 1, "wakeup": 0b000, "drive_mode": 1,"transmission_mode": 1, "channel": ChannelType.channel_868}
+default_options = {"power": 0x02, "FEC": 1, "wakeup": 0b000, "drive_mode": 1,"transmission_mode": 1, "channel": 0x82}
 
 class SX1276:
     __ports = {}
     __serial = None
 
+    # 410~441MHz: 410M + CHAN*1M
+    # 855~880.5MHz: 855 + channel * 0.1M
+    # eg. channel val (in decimal) = 441 - 410 * 1M 
+    #     channel val (in decimal) = (880.5 - 855) * 10M
+    class Channel:
+        CHN_410 = 0x00
+        CHN_433 = 0x17
+        CHN_441 = 0x1F
+        CHN_855 = 0x00
+        CHN_868 = 0x82
+        CHN_880 = 0xFF
+
+    class Power:
+        PWR_20DB = 0x00
+        PWR_17DB = 0x01
+        PWR_14DB = 0x02
+        PWR_10DB = 0x03
+
+    class Mode:
+        NORMAL = 0
+        WAKEUP = 1
+        POWERSAVE = 2
+        SLEEP = 3
+
     def __init__(self, ports):
-        self.__ports = ports
-    
+        self.__ports = ports    
 
     @classmethod
     def begin(cls, ports, address, speed, options):
@@ -68,9 +67,9 @@ class SX1276:
         
         parameters = [address["HEAD"], address["ADDH"], address["ADDL"],SPED,CHAN, OPTION]
         
-        module.changeMode(ModuleMode.SLEEP)
+        module.changeMode(SX1276.Mode.SLEEP)
         module.__writeParameters(parameters)
-        module.changeMode(ModuleMode.NORMAL)
+        module.changeMode(SX1276.Mode.NORMAL)
 
         return module
 
@@ -94,16 +93,16 @@ class SX1276:
     def receiveMessage():
         return ""
     def changeMode(self, mode):
-        if (mode == ModuleMode.NORMAL):
+        if (mode == self.Mode.NORMAL):
             gpio.output(self.__ports["M0"], gpio.LOW)
             gpio.output(self.__ports["M1"], gpio.LOW)
-        elif (mode == ModuleMode.WAKEUP):
+        elif (mode == self.Mode.WAKEUP):
             gpio.output(self.__ports["M0"], gpio.HIGH)
             gpio.output(self.__ports["M1"], gpio.LOW)
-        elif (mode == ModuleMode.POWERSAVE):
+        elif (mode == self.Mode.POWERSAVE):
             gpio.output(self.__ports["M0"], gpio.LOW)
             gpio.output(self.__ports["M1"], gpio.HIGH)
-        elif (mode == ModuleMode.SLEEP):
+        elif (mode == self.Mode.SLEEP):
             gpio.output(self.__ports["M0"], gpio.HIGH)
             gpio.output(self.__ports["M1"], gpio.HIGH)
         
@@ -123,7 +122,7 @@ class SX1276:
 
 
     def getParameters(self):
-        self.changeMode(ModuleMode.SLEEP)
+        self.changeMode(self.Mode.SLEEP)
 
         self.__writeParameters([0xC1,0xC1,0xC1])
         sleep(0.1)
@@ -131,7 +130,7 @@ class SX1276:
         return self.__readBuffer()
 
     def getVersion(self):
-        self.changeMode(ModuleMode.SLEEP)
+        self.changeMode(self.Mode.SLEEP)
 
         self.__writeParameters([0xC3,0xC3,0xC3])
         sleep(0.1)
@@ -154,7 +153,7 @@ ports = {
 
 address = {"HEAD": 0xC0,"ADDH": 0x01,"ADDL": 0x02}
 speed = {"adr": 0b010,"baudrate": 0b011,"parity": 0b00}
-options = {"power": TransmitPower.PWR_17DB, "FEC": 1, "wakeup": 0b000, "drive_mode": 1,"transmission_mode": 1}
+options = {"power": SX1276.Power.PWR_17DB, "FEC": 1, "wakeup": 0b000, "drive_mode": 1,"transmission_mode": 1}
 
 module = SX1276.begin(ports, address, speed, options)
 print(str(module.getVersion()))
