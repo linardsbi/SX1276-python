@@ -39,15 +39,19 @@ class SX1276:
         SLEEP = 3
 
     def __init__(self, ports):
-        self.__ports = ports    
+        self.__ports = ports
+
+    def __clearBuffer(self):
+       self.__serial.flushInput()
+       self.__serial.flushOutput()
 
     @classmethod
-    def begin(cls, ports, address, speed, options):
+    def begin(cls, ports, address=default_address, speed=default_speed, options=default_options):
         module = cls(ports)
  
         module.configPorts()
         
-        # override defaults with specified
+        # override defaults with provided
         tmp = {**default_address}
         tmp.update(address)
         address = {**tmp}
@@ -69,7 +73,9 @@ class SX1276:
         
         module.changeMode(SX1276.Mode.SLEEP)
         module.__writeParameters(parameters)
-        module.changeMode(SX1276.Mode.NORMAL)
+        module.__resetModule()
+
+        module.__clearBuffer()
 
         return module
 
@@ -83,15 +89,20 @@ class SX1276:
         gpio.setcfg(self.__ports["AUX"], gpio.INPUT)
         
         try:
-            self.__serial = serial.Serial(port=self.__ports["SERIAL"], baudrate=9600, timeout=1)
+            self.__serial = serial.Serial(port=self.__ports["SERIAL"], baudrate=9600, timeout=0.5)
         except Exception as e:
             print("Serial error. {} - check README.MD to fix".format(e))
             exit()
 
     def sendMessage(self, message):
         pass
-    def receiveMessage():
-        return ""
+
+    def messageAvailable(self):
+        return self.busy()
+
+    def getMessage(self):
+        return self.__readBuffer()
+
     def changeMode(self, mode):
         if (mode == self.Mode.NORMAL):
             gpio.output(self.__ports["M0"], gpio.LOW)
@@ -105,41 +116,45 @@ class SX1276:
         elif (mode == self.Mode.SLEEP):
             gpio.output(self.__ports["M0"], gpio.HIGH)
             gpio.output(self.__ports["M1"], gpio.HIGH)
-        
-        sleep(0.1)            
+    
+        while self.busy():
+            sleep(0.05)
 
     def __readBuffer(self):
-        data = ""
+        data = []
 
         while True:
             line = ""
             line = self.__serial.readline()
-
+            
             if not line: break
-
-            data += str(line)
-        return data
-
+            data = ["%02x" % i for i in list(line)]
+        
+        return list(data)
 
     def getParameters(self):
         self.changeMode(self.Mode.SLEEP)
 
         self.__writeParameters([0xC1,0xC1,0xC1])
-        sleep(0.1)
-
+        sleep(1)
         return self.__readBuffer()
 
     def getVersion(self):
         self.changeMode(self.Mode.SLEEP)
 
         self.__writeParameters([0xC3,0xC3,0xC3])
-        sleep(0.1)
 
         return self.__readBuffer()
     
+    def busy(self):
+        return not gpio.input(self.__ports["AUX"])
+
     def __resetModule(self):
+        self.changeMode(self.Mode.SLEEP)
         self.__writeParameters([0xC4,0xC4,0xC4])
-        sleep(1.2)
+        sleep(1)
+        while self.busy():
+            sleep(0.05)
 
     def __writeParameters(self,parameters):
         assert(type(parameters) == list)
@@ -151,9 +166,16 @@ ports = {
          "AUX": port.PG8,
          "SERIAL":  "/dev/ttyS1"}
 
-address = {"HEAD": 0xC0,"ADDH": 0x01,"ADDL": 0x02}
+address = {"HEAD": 0xC0,"ADDH": 0x05,"ADDL": 0x02}
 speed = {"adr": 0b010,"baudrate": 0b011,"parity": 0b00}
-options = {"power": SX1276.Power.PWR_17DB, "FEC": 1, "wakeup": 0b000, "drive_mode": 1,"transmission_mode": 1}
+options = {"power": SX1276.Power.PWR_17DB, "FEC": 1, "wakeup": 0b011, "drive_mode": 1,"transmission_mode": 1}
 
-module = SX1276.begin(ports, address, speed, options)
-print(str(module.getVersion()))
+module = SX1276.begin(ports, address, options=options)
+print(module.getParameters())
+print(module.getVersion())
+module.changeMode(SX1276.Mode.NORMAL)
+print("Started. Waiting for messages.")
+while True:
+    if module.messageAvailable():
+        message = module.getMessage()
+        print("Received message: {}".format(message))
