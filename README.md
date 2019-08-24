@@ -1,6 +1,8 @@
 # SX1276-python
 Rough API for the SX1276 chip that runs on Python
+
 Install by running: `pip install .`
+
 Minimum Python version: 3.5
 ## Serial error
 *Setting up serial for `Orange PI` on `Armbian`*
