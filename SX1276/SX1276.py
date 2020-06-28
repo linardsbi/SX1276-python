@@ -68,12 +68,12 @@ class SX1276:
         SPED = int(speed["parity"] << 6 | speed["baudrate"] << 3 | speed["adr"])
         CHAN = options["channel"]
         OPTION = int(options["transmission_mode"] << 7 | options["drive_mode"] << 6 | options["wakeup"] << 3 | options["FEC"] << 2 | options["power"])
-        
         parameters = [address["HEAD"], address["ADDH"], address["ADDL"],SPED,CHAN, OPTION]
         
         module.changeMode(SX1276.Mode.SLEEP)
         sleep(2)
         module.__writeParameters(parameters)
+        sleep(2)
         module.__resetModule()
 
         module.__clearBuffer()
@@ -99,6 +99,7 @@ class SX1276:
         # assuming that the first three elements are receiver info
         new_message = message[:3]
         tmp_message = []
+        length = 0
 
         for val in message[3:]:
             tmp = val

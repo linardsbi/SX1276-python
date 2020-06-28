@@ -1,5 +1,5 @@
 from SX1276 import SX1276
-
+from pyA20.gpio import port
 if __name__ == "__main__":
 
     ports = {
@@ -9,9 +9,9 @@ if __name__ == "__main__":
         "SERIAL":  "/dev/ttyS1"
         }
 
-    address = {"HEAD": 0xC0,"ADDH": 0x05,"ADDL": 0x02}
+    address = {"HEAD": 0xC0,"ADDH": 0x0,"ADDL": 0x03}
     speed = {"adr": 0b010,"baudrate": 0b011,"parity": 0b00}
-    options = {"power": SX1276.Power.PWR_17DB, "FEC": 1, "wakeup": 0b011, "drive_mode": 1,"transmission_mode": 1}
+    options = {"power": 0b1, "FEC": 1, "wakeup": 0, "drive_mode": 1,"transmission_mode": 1, "channel": 0x4}
 
     module = SX1276.begin(ports, address, options=options)
     
@@ -25,4 +25,6 @@ if __name__ == "__main__":
     while True:
         if module.messageAvailable():
             message = module.getMessage()
-            if message: print("Received message: {}".format(message))
+            if message: 
+                print("Received message: {}".format(message))
+                module.sendMessage([0x0,0x1,0x4,0xFF])
