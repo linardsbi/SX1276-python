@@ -13,7 +13,6 @@ default_options = {"power": 0x02, "FEC": 1, "wakeup": 0b000, "drive_mode": 1,"tr
 class SX1276:
     __ports = {}
     __serial = None
-
     # 410~441MHz: 410M + CHAN*1M
     # 855~880.5MHz: 855 + channel * 0.1M
     # eg. channel val (in decimal) = 441 - 410 * 1M 
@@ -37,6 +36,7 @@ class SX1276:
         WAKEUP = 1
         POWERSAVE = 2
         SLEEP = 3
+        NONE = 4
 
     def __init__(self, ports):
         self.__ports = ports
@@ -46,8 +46,9 @@ class SX1276:
        self.__serial.flushOutput()
 
     @classmethod
-    def begin(cls, ports, address=default_address, speed=default_speed, options=default_options):
-        module = cls(ports)
+    def begin(self, ports, address=default_address, speed=default_speed, options=default_options):
+        module = self(ports)
+        self.__currentMode = self.Mode.NONE
  
         module.configPorts()
         
@@ -69,13 +70,13 @@ class SX1276:
         CHAN = options["channel"]
         OPTION = int(options["transmission_mode"] << 7 | options["drive_mode"] << 6 | options["wakeup"] << 3 | options["FEC"] << 2 | options["power"])
         parameters = [address["HEAD"], address["ADDH"], address["ADDL"],SPED,CHAN, OPTION]
-        
+        module.changeMode(SX1276.Mode.NORMAL)        
+        module.__clearBuffer()
         module.changeMode(SX1276.Mode.SLEEP)
-        sleep(2)
+        sleep(0.05)
         module.__writeParameters(parameters)
         sleep(2)
         module.__resetModule()
-
         module.__clearBuffer()
 
         return module
@@ -137,7 +138,6 @@ class SX1276:
         
         if formatting:
             message = self.__formatMessage(message, options)
-        
         self.__serial.write(bytes(message))
 
     def messageAvailable(self):
@@ -147,6 +147,9 @@ class SX1276:
         return self.__readBuffer()
 
     def changeMode(self, mode):
+        if (mode == self.__currentMode):
+            return
+
         if (mode == self.Mode.NORMAL):
             gpio.output(self.__ports["M0"], gpio.LOW)
             gpio.output(self.__ports["M1"], gpio.LOW)
@@ -159,9 +162,11 @@ class SX1276:
         elif (mode == self.Mode.SLEEP):
             gpio.output(self.__ports["M0"], gpio.HIGH)
             gpio.output(self.__ports["M1"], gpio.HIGH)
-    
+        
+        self.__currentMode = mode
+
         while self.busy():
-            sleep(0.1)
+            sleep(0.05)
 
     def __readBuffer(self):
         data = []
@@ -179,14 +184,14 @@ class SX1276:
         self.changeMode(self.Mode.SLEEP)
 
         self.__writeParameters([0xC1,0xC1,0xC1])
-        
+        sleep(0.05)
         return self.__readBuffer()
 
     def getVersion(self):
         self.changeMode(self.Mode.SLEEP)
 
         self.__writeParameters([0xC3,0xC3,0xC3])
-
+        sleep(0.05)
         return self.__readBuffer()
     
     def busy(self):
@@ -196,8 +201,6 @@ class SX1276:
         self.changeMode(self.Mode.SLEEP)
         self.__writeParameters([0xC4,0xC4,0xC4])
         sleep(1)
-        while self.busy():
-            sleep(0.05)
 
     def __writeParameters(self,parameters):
         assert(type(parameters) == list)
